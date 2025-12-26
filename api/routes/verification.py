@@ -22,7 +22,6 @@ from api.models.schemas import (
 from core import DocumentProcessor, AccuracyCalculator
 from core.service_registry import get_service_registry
 from config import get_settings, get_document_registry
-from services.middleware import require_bearer_auth
 from services.webhook import post_data_via_webhook
 from utils.file_handler import download_file, get_file_extension
 from core.celery import celery_app as _celery
@@ -180,7 +179,6 @@ async def process_single_document(
 
 
 @router.post("/verify")
-@require_bearer_auth
 async def verify_documents(
     request: VerificationRequest,
     background_tasks: BackgroundTasks

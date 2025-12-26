@@ -7,6 +7,11 @@ from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from config import get_settings
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import Request, HTTPException, status
+
+settings = get_settings()
+
 
 class APITokenMiddleware(BaseHTTPMiddleware):
     """
@@ -39,27 +44,27 @@ class APITokenMiddleware(BaseHTTPMiddleware):
         
         # Check if it's an API endpoint (starts with /api)
         if path.startswith("/api"):
-            settings = get_settings()
             
             # If API token is not configured, skip protection (for backward compatibility)
-            if not settings.api_token:
+            if not settings.bearer_token:
                 return await call_next(request)
             
             # Get token from header
-            token = request.headers.get("X-API-Token") or request.headers.get("x-api-token")
+            # token = request.headers.get("X-API-Token") or request.headers.get("x-api-token")
+            bearer_token = request.headers.get("Authorization")
             
-            if not token:
+            if not bearer_token:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Missing API token. Please include X-API-Token header.",
-                    headers={"WWW-Authenticate": "Token"},
+                    detail="Missing bearer token. Please include Authorization header.",
+                    headers={"WWW-Authenticate": "Bearer"},
                 )
             
             # Validate token
-            if token != settings.api_token:
+            if bearer_token != settings.bearer_token:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Invalid API token.",
+                    detail="Invalid bearer token.",
                 )
         
         return await call_next(request)

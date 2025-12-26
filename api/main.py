@@ -42,6 +42,7 @@ app = FastAPI(
 # Add this FIRST so it runs before CORS (middleware runs in reverse order)
 app.add_middleware(APITokenMiddleware)
 
+
 # CORS middleware (configure as needed)
 app.add_middleware(
     CORSMiddleware,
