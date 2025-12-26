@@ -1,0 +1,63 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doc-verifier-api
+    ports:
+      - "5002:5002"
+    environment:
+      # GitHub Models API
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      
+      # Model Configuration
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-Llama 4 Maverick 17B 128E Instruct FP8}
+      - DEFAULT_TEMPERATURE=${DEFAULT_TEMPERATURE:-0.7}
+      - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-2000}
+      - API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-120}
+      
+      # Token Optimization (per document type)
+      - TOKEN_OPTIMIZATION_INDEX_2=${TOKEN_OPTIMIZATION_INDEX_2:-false}
+      - TOKEN_OPTIMIZATION_NOC=${TOKEN_OPTIMIZATION_NOC:-true}
+      - TOKEN_OPTIMIZATION_NO_DUES=${TOKEN_OPTIMIZATION_NO_DUES:-true}
+      
+      # Image Optimization Settings
+      - MAX_IMAGE_WIDTH=${MAX_IMAGE_WIDTH:-1536}
+      - MAX_IMAGE_HEIGHT=${MAX_IMAGE_HEIGHT:-1536}
+      - JPEG_QUALITY=${JPEG_QUALITY:-85}
+      - ENABLE_AUTO_CROP=${ENABLE_AUTO_CROP:-false}
+      - ENABLE_GRAYSCALE=${ENABLE_GRAYSCALE:-false}
+      
+      # Embedding Model
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-intfloat/multilingual-e5-base}
+      - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-768}
+      
+      # API Configuration
+      - API_HOST=0.0.0.0
+      - API_PORT=5002
+      - API_TITLE=${API_TITLE:-Document Verification API}
+      - API_VERSION=${API_VERSION:-1.0.0}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Security Settings
+      - API_TOKEN=${API_TOKEN:-}
+      - SWAGGER_PASSWORD=${SWAGGER_PASSWORD:-}
+    volumes:
+      # Mount prompts directory if you want to edit prompts without rebuilding
+      - ./prompts:/app/prompts:ro
+    restart: unless-stopped
+    networks:
+      - doc-verifier-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/api/v1/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  doc-verifier-network:
+    driver: bridge
+
