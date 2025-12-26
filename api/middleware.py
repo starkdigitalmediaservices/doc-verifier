@@ -59,9 +59,8 @@ class APITokenMiddleware(BaseHTTPMiddleware):
                     detail="Missing bearer token. Please include Authorization header.",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            
             # Validate token
-            if bearer_token != settings.bearer_token:
+            if bearer_token.split(" ")[1] != settings.bearer_token:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Invalid bearer token.",

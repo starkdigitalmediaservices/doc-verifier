@@ -6,11 +6,12 @@ import os
 import time
 import tempfile
 import shutil
+import uuid
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
 from api.models.schemas import (
@@ -24,7 +25,7 @@ from core.service_registry import get_service_registry
 from config import get_settings, get_document_registry
 from services.webhook import post_data_via_webhook
 from utils.file_handler import download_file, get_file_extension
-from core.celery import celery_app as _celery
+from api.routes.tasks import process_docs  # Import the Celery task
 
 router = APIRouter(prefix="/api/v1", tags=["verification"])
 
@@ -208,18 +209,21 @@ async def verify_documents(
         
         # Convert Pydantic models to dicts for Celery serialization
         documents_data = [doc.dict() for doc in request.documents]
+        task_id = str(uuid.uuid4())
         
         # Queue the task with Celery (convert Path to string for serialization)
         task = process_docs.delay({
             "documents": documents_data,
             "service_name": request.service_name,
             "temp_dir": str(temp_dir),  # Convert Path to string for JSON serialization
+            "task_id": task_id
         })
 
         return {
             "success": True,
             "service_name": request.service_name,
-            "appNo": request.appNo
+            "appNo": request.appNo,
+            "task_id": task_id
         }
 
     except Exception as e:
@@ -246,147 +250,14 @@ async def health_check() -> dict:
         "timestamp": datetime.now().isoformat()
     }
 
-def process_single_document_sync(
-    doc_info: dict,
-    service_name: str,
-    temp_dir: Path
-) -> Dict[str, Any]:
+
+@router.post("/webhook")
+async def get_webhook_data(request: Request):
     """
-    Synchronous wrapper for process_single_document
-    Runs the async function in an event loop
+    Get webhook data
     
-    Args:
-        doc_info: Document information from request (as dict)
-        service_name: Service name
-        temp_dir: Temporary directory for downloaded files (as Path or str)
-        
     Returns:
-        Dictionary representation of DocumentResult
+        Webhook data
     """
-    # Convert temp_dir to Path if it's a string
-    if isinstance(temp_dir, str):
-        temp_dir = Path(temp_dir)
-    
-    # Run the async function in a new event loop
-    # asyncio.run() creates a new event loop, runs the coroutine, and closes the loop
-    # This is safe to use in Celery tasks which run in separate processes
-    result = asyncio.run(process_single_document(doc_info, service_name, temp_dir))
-    
-    # Convert DocumentResult Pydantic model to dict for JSON serialization
-    return result.dict() if hasattr(result, 'dict') else result
-
-
-@_celery.task
-def process_docs(data: Dict):
-    """
-    Celery task to process documents asynchronously
-    
-    Args:
-        data: Dictionary containing:
-            - documents: List of document info dicts
-            - service_name: Service name string
-            - temp_dir: Temporary directory path as string
-            
-    Returns:
-        Dictionary with processing results
-    """
-    try:
-        # Extract data from dictionary (Celery serializes everything as dict)
-        documents = data.get("documents", [])
-        service_name = data.get("service_name", "")
-        temp_dir_str = data.get("temp_dir", "")
-        
-        # Convert temp_dir string back to Path
-        temp_dir = Path(temp_dir_str) if temp_dir_str else Path(tempfile.mkdtemp())
-        
-        # Process all documents
-        results: List[Dict[str, Any]] = []
-        
-        for doc_info in documents:
-            # doc_info is already a dict from Celery serialization
-            # If it's a Pydantic model that was serialized, it's now a dict
-            if not isinstance(doc_info, dict):
-                # Convert to dict if it's still a model
-                doc_info = doc_info.dict() if hasattr(doc_info, 'dict') else dict(doc_info)
-            
-            try:
-                result_dict = process_single_document_sync(
-                    doc_info=doc_info,
-                    service_name=service_name,
-                    temp_dir=temp_dir
-                )
-                results.append(result_dict)
-            except Exception as e:
-                # Handle individual document errors gracefully
-                error_result = {
-                    "document_type": doc_info.get("document_type", "Unknown"),
-                    "document_url": doc_info.get("download_url", ""),
-                    "success": False,
-                    "accuracy": 0.0,
-                    "fields_accuracy": {},
-                    "error": f"Processing error: {str(e)}"
-                }
-                results.append(error_result)
-        
-        # Calculate summary statistics
-        successful = sum(1 for r in results if r.get("success", False))
-        failed = len(results) - successful
-        avg_accuracy = (
-            sum(r.get("accuracy", 0.0) for r in results if r.get("success", False)) / successful
-            if successful > 0 else 0.0
-        )
-        
-        # Clean up temporary directory (Celery runs in separate process, so cleanup here)
-        try:
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir, ignore_errors=True)
-        except Exception:
-            pass  # Ignore cleanup errors
-        
-        response = {}
-        data = {
-            "success": True,
-            "service_name": service_name,
-            "total_documents": len(results),
-            "successful": successful,
-            "failed": failed,
-            "average_accuracy": avg_accuracy,
-            "results": results,
-        }
-        
-        if os.getenv("WEBHOOK_ENABLE"):
-            if webhook_url := os.getenv("WEBHOOK_URL"):
-                response = post_data_via_webhook(
-                    url=webhook_url,
-                    data=data,
-                    timeout=350,
-                    headers={
-                        "Authorization": f"Bearer {os.getenv('WEBHOOK_TOKEN')}",
-                        "Accept": "application/json",
-                    }
-                )
-            else:
-                print("Webhook url is missing, Please add it into the .env")
-
-        print("Response : ", response)
-
-    except Exception as e:
-        # Clean up temporary directory even on error
-        try:
-            if 'temp_dir' in locals() and temp_dir.exists():
-                shutil.rmtree(temp_dir, ignore_errors=True)
-        except Exception:
-            pass
-        
-        # Return error result instead of raising HTTPException (Celery tasks shouldn't raise HTTPException)
-        return {
-            "success": False,
-            "error": f"Internal server error: {str(e)}",
-            "total_documents": 0,
-            "successful": 0,
-            "failed": 0,
-            "average_accuracy": 0.0,
-            "results": [],
-        }
-
-
+    print(await request.json())
+    return JSONResponse(content={"message": "Webhook received"}, status_code=200)
