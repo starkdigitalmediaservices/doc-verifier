@@ -24,3 +24,10 @@ celery_app.conf.update(
 
 # Create alias for easy import: from core.celery import _celery
 _celery = celery_app
+
+# Import task modules to ensure tasks are registered
+# This is necessary because autodiscover_tasks() may not find tasks
+# if the modules aren't imported when Celery starts
+import api.routes.verification  # noqa: F401
+
+celery_app.autodiscover_tasks()

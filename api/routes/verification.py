@@ -181,7 +181,8 @@ async def process_single_document(
 
 @router.post("/verify")
 async def verify_documents(
-    request: VerificationRequest,
+    request: Request,
+    body: VerificationRequest,
     background_tasks: BackgroundTasks
 ):
     """
@@ -194,7 +195,8 @@ async def verify_documents(
     4. Returns field-level accuracy for each document
     
     Args:
-        request: Verification request with documents and actual data
+        request: FastAPI Request object (for authentication)
+        body: Verification request with documents and actual data
         background_tasks:  background tasks (for cleanup)
         
     Returns:
@@ -208,22 +210,22 @@ async def verify_documents(
         background_tasks.add_task(lambda: shutil.rmtree(temp_dir, ignore_errors=True) if temp_dir.exists() else None)
         
         # Convert Pydantic models to dicts for Celery serialization
-        documents_data = [doc.dict() for doc in request.documents]
+        documents_data = [doc.dict() for doc in body.documents]
         task_id = str(uuid.uuid4())
         
         # Queue the task with Celery (convert Path to string for serialization)
         task = process_docs.delay({
             "documents": documents_data,
-            "service_name": request.service_name,
+            "service_name": body.service_name,
             "temp_dir": str(temp_dir),  # Convert Path to string for JSON serialization
             "task_id": task_id
         })
 
         return {
             "success": True,
-            "service_name": request.service_name,
-            "appNo": request.appNo,
-            "task_id": task_id
+            "service_name": body.service_name,
+            "appNo": body.appNo,
+            "task_id": task.id  # Add task ID for tracking
         }
 
     except Exception as e:
@@ -250,6 +252,45 @@ async def health_check() -> dict:
         "timestamp": datetime.now().isoformat()
     }
 
+
+@router.get("/task/{task_id}", response_model=dict)
+async def get_task_result(task_id: str) -> dict:
+    """
+    Get task result by task ID
+    Useful for local testing to retrieve results without webhook
+    
+    Args:
+        task_id: Celery task ID
+        
+    Returns:
+        Task result or status information
+    """
+    from core.celery import celery_app
+    
+    try:
+        task_result = celery_app.AsyncResult(task_id)
+        
+        if task_result.ready():
+            if task_result.successful():
+                return {
+                    "status": "completed",
+                    "result": task_result.result
+                }
+            else:
+                return {
+                    "status": "failed",
+                    "error": str(task_result.info) if task_result.info else "Task failed"
+                }
+        else:
+            return {
+                "status": "pending",
+                "message": "Task is still being processed"
+            }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving task result: {str(e)}"
+        )
 
 @router.post("/webhook")
 async def get_webhook_data(request: Request):

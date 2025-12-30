@@ -430,6 +430,33 @@ header h1 {
     background: var(--error-color);
 }
 
+.test-mode-section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: var(--shadow);
+    border: 2px dashed var(--warning-color);
+}
+
+.acknowledgment-card {
+    background: #d1fae5;
+    border: 2px solid var(--success-color);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+}
+
+.acknowledgment-card h3 {
+    color: var(--success-color);
+    margin-bottom: 15px;
+}
+
+.acknowledgment-card p {
+    margin: 8px 0;
+    color: var(--text-primary);
+}
+
 @media (max-width: 768px) {
     .container {
         padding: 10px;

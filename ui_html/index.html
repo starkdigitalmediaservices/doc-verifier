@@ -17,12 +17,31 @@
             <h2>⚙️ Configuration</h2>
             <div class="form-group">
                 <label for="apiUrl">API Base URL:</label>
-                <input type="text" id="apiUrl" value="http://34.227.36.59:5002" placeholder="http://34.227.36.59:5002">
+                <input type="text" id="apiUrl" value="http://localhost:5002" placeholder="http://localhost:5002">
+            </div>
+            <div class="form-group">
+                <label for="bearerToken">Bearer Token (Required):</label>
+                <input type="password" id="bearerToken" placeholder="Enter Bearer token (required for /api/v1/verify)">
+                <small style="color: var(--text-secondary); font-size: 0.9em;">Required - Set BEARER_TOKEN in server .env file</small>
             </div>
             <div class="form-group">
                 <label for="apiToken">API Token (optional):</label>
                 <input type="password" id="apiToken" placeholder="Leave empty if API token is not required">
-                <small style="color: var(--text-secondary); font-size: 0.9em;">Required if API_TOKEN is set in server configuration</small>
+                <small style="color: var(--text-secondary); font-size: 0.9em;">Optional - For general API protection</small>
+            </div>
+            <div class="form-group">
+                <label for="appNo">Application Number (Required):</label>
+                <input type="text" id="appNo" placeholder="Enter unique application number (e.g., SJG635YS)">
+                <small style="color: var(--text-secondary); font-size: 0.9em;">Required - Unique identifier for this verification request</small>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="testMode" checked>
+                    <span style="margin-left: 8px;">Test Mode - Manual Result Entry (for local testing without webhook)</span>
+                </label>
+                <small style="color: var(--text-secondary); font-size: 0.9em; display: block; margin-top: 5px;">
+                    When enabled, you can manually paste webhook results JSON after submission
+                </small>
             </div>
         </div>
 
@@ -53,6 +72,18 @@
         <div id="errorSection" class="error-section hidden">
             <h3>❌ Error</h3>
             <div id="errorMessage"></div>
+        </div>
+
+        <div id="testModeSection" class="test-mode-section hidden">
+            <h2>🧪 Test Mode - Enter Results Manually</h2>
+            <p style="margin-bottom: 15px; color: var(--text-secondary);">
+                Since the new system uses webhooks, paste the webhook response JSON here to view results:
+            </p>
+            <div class="form-group">
+                <label for="manualResults">Webhook Response JSON:</label>
+                <textarea id="manualResults" rows="10" placeholder='Paste webhook response JSON here, e.g. {"success": true, "service_name": "PT5", "total_documents": 1, ...}'></textarea>
+            </div>
+            <button id="processManualResultsBtn" class="btn btn-primary">Process Results</button>
         </div>
     </div>
 

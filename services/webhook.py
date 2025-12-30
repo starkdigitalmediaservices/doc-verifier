@@ -24,5 +24,6 @@ def post_data_via_webhook(
         return response
 
     except requests.exceptions.RequestException as exc:
-        print("Exception reason : ", response.reason)
+        if 'response' in locals() and hasattr(response, 'reason'):
+            print("Exception reason : ", response.reason)
         raise RuntimeError(f"Webhook call failed: {exc}") from exc

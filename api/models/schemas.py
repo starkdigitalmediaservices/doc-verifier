@@ -16,8 +16,8 @@ class DocumentInfo(BaseModel):
 class VerificationRequest(BaseModel):
     """Request model for document verification"""
     service_name: str = Field(..., description="Service name (e.g., PT5)")
+    appNo: str = Field(..., description="Unique app number")
     documents: List[DocumentInfo] = Field(..., description="List of documents to verify")
-    appNo: str = Field(description="Unique app number")
 
     class Config:
         json_schema_extra = {

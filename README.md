@@ -44,43 +44,62 @@ Doc Verifier/
 
 ## ✨ Features
 
+- ✅ **Asynchronous Processing**: Celery-based background task processing
 - ✅ **Modular Architecture**: API, Core, UI completely separated
 - ✅ **RESTful API**: FastAPI with Swagger/OpenAPI documentation
+- ✅ **Webhook Integration**: Results delivered via webhook POST
+- ✅ **Bearer Token Auth**: Industry-standard OAuth 2.0 authentication
 - ✅ **Token Optimization**: Per document type toggle via `.env`
 - ✅ **Production Frontend**: HTML/CSS/JavaScript UI
 - ✅ **Service Registry**: Easy extensibility for future services
 - ✅ **Hybrid Accuracy**: Fuzzy matching + semantic embeddings
-- ✅ **Production Ready**: Error handling, timeouts, logging
+- ✅ **Production Ready**: Error handling, timeouts, logging, scalability
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### Option 1: Docker (Recommended)
 
 ```bash
+# 1. Create .env file
+cp .env.example .env
+# Edit .env and add your GITHUB_TOKEN and BEARER_TOKEN
+
+# 2. Start all services
+docker-compose up -d
+
+# 3. Check services
+docker-compose ps
+curl http://localhost:5002/api/v1/health
+```
+
+**Services started:**
+- ✅ API Server: http://localhost:5002
+- ✅ API Docs: http://localhost:5002/docs
+- ✅ Redis: Running on port 6379
+- ✅ Celery Worker: Processing background tasks
+
+### Option 2: Local Development
+
+```bash
+# 1. Install dependencies
 pip install -r requirements.txt
+
+# 2. Start Redis (required)
+docker run -d -p 6379:6379 --name redis redis:7-alpine
+# Or: sudo systemctl start redis (if installed)
+
+# 3. Create .env file
+cp .env.example .env
+# Edit .env and add your tokens
+
+# 4. Start all services
+./start_local.sh
+# Or manually:
+# Terminal 1: ./run_api.sh
+# Terminal 2: ./run_celery_worker.sh
 ```
 
-### 2. Configure Environment
-
-Create `.env` file (see `SETUP.md` for details):
-
-```env
-GITHUB_TOKEN=your_github_token_here
-TOKEN_OPTIMIZATION_INDEX_2=false
-TOKEN_OPTIMIZATION_NOC=true
-TOKEN_OPTIMIZATION_NO_DUES=true
-```
-
-### 3. Run API Server
-
-```bash
-./run_api.sh
-# Or: uvicorn api.main:app --host 0.0.0.0 --port 5002 --reload
-```
-
-Visit: http://localhost:5002/docs
-
-### 4. Run HTML UI
+### 4. Run HTML UI (Optional)
 
 ```bash
 cd ui_html
@@ -89,11 +108,30 @@ cd ui_html
 
 Visit: http://localhost:8081
 
+**📖 For detailed setup instructions, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**
+
 ## 📚 Documentation
 
-- **[SETUP.md](SETUP.md)**: Detailed setup instructions
-- **[API_INTEGRATION.md](API_INTEGRATION.md)**: PMC integration guide
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**: Complete deployment guide (local & production)
+- **[CHANGES_ANALYSIS.md](CHANGES_ANALYSIS.md)**: Detailed analysis of backend upgrades
+- **[API_FORMAT_COMPARISON.md](API_FORMAT_COMPARISON.md)**: Old vs New API format comparison
+- **[SALES_DEMO_GUIDE.md](SALES_DEMO_GUIDE.md)**: Guide for demonstrating the system
 - **Swagger UI**: http://localhost:5002/docs (when API is running)
+
+## 🔄 Architecture Changes
+
+This system has been upgraded to use **asynchronous processing**:
+
+- **Old System**: Synchronous API (blocks client for 10-30 seconds)
+- **New System**: Asynchronous API (instant response, results via webhook)
+
+**Key Components:**
+- **FastAPI**: REST API server
+- **Celery**: Background task queue
+- **Redis**: Message broker for Celery
+- **Webhook**: Results delivery mechanism
+
+See [CHANGES_ANALYSIS.md](CHANGES_ANALYSIS.md) for complete details.
 
 ## 🔧 Token Optimization
 
@@ -114,9 +152,17 @@ TOKEN_OPTIMIZATION_NO_DUES=true
 
 **POST** `/api/v1/verify`
 
+**Headers:**
+```http
+Authorization: Bearer your_bearer_token_here
+Content-Type: application/json
+```
+
+**Request:**
 ```json
 {
   "service_name": "PT5",
+  "appNo": "SJG635YS",
   "documents": [
     {
       "download_url": "https://pmc.gov.in/docs/doc1.pdf",
@@ -132,7 +178,24 @@ TOKEN_OPTIMIZATION_NO_DUES=true
 }
 ```
 
-See [API_INTEGRATION.md](API_INTEGRATION.md) for complete integration guide.
+**Response (Immediate):**
+```json
+{
+  "success": true,
+  "service_name": "PT5",
+  "appNo": "SJG635YS"
+}
+```
+
+**Results Delivery:**
+- Results are sent via **webhook POST** to configured `WEBHOOK_URL`
+- Processing happens asynchronously in background
+- Full results structure same as old system
+
+**⚠️ Important:** 
+- Bearer token is **REQUIRED** for this endpoint
+- Results are delivered via webhook, not in HTTP response
+- See [API_FORMAT_COMPARISON.md](API_FORMAT_COMPARISON.md) for migration guide
 
 ## 🎨 Extensibility
 

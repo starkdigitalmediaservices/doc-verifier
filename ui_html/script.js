@@ -32,6 +32,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('addDocumentBtn').addEventListener('click', addDocument);
     document.getElementById('submitBtn').addEventListener('click', submitDocuments);
     document.getElementById('clearBtn').addEventListener('click', clearAll);
+    document.getElementById('processManualResultsBtn').addEventListener('click', processManualResults);
+    
+    // Show/hide test mode section based on checkbox
+    const testModeCheckbox = document.getElementById('testMode');
+    const testModeSection = document.getElementById('testModeSection');
+    testModeCheckbox.addEventListener('change', () => {
+        if (testModeCheckbox.checked) {
+            testModeSection.classList.remove('hidden');
+        } else {
+            testModeSection.classList.add('hidden');
+        }
+    });
+    
+    // Initialize test mode section visibility
+    if (testModeCheckbox.checked) {
+        testModeSection.classList.remove('hidden');
+    }
 });
 
 function addDocument() {
@@ -73,6 +90,16 @@ function addDocument() {
     const urlInput = docCard.querySelector('.doc-url-input');
     if (urlInput) {
         urlInput.addEventListener('input', () => updateDocumentData(docId));
+    }
+    
+    // Add event listeners for required fields to update submit button
+    const bearerTokenInput = document.getElementById('bearerToken');
+    const appNoInput = document.getElementById('appNo');
+    if (bearerTokenInput) {
+        bearerTokenInput.addEventListener('input', updateSubmitButton);
+    }
+    if (appNoInput) {
+        appNoInput.addEventListener('input', updateSubmitButton);
     }
     
     updateSubmitButton();
@@ -222,6 +249,8 @@ function updateDocumentData(docId) {
 
 function updateSubmitButton() {
     const submitBtn = document.getElementById('submitBtn');
+    const bearerToken = document.getElementById('bearerToken')?.value.trim() || '';
+    const appNo = document.getElementById('appNo')?.value.trim() || '';
     const hasValidDocuments = documents.some(doc => 
         doc.type && 
         doc.url && 
@@ -231,7 +260,8 @@ function updateSubmitButton() {
         )
     );
     
-    submitBtn.disabled = !hasValidDocuments;
+    // Disable if missing required fields or no valid documents
+    submitBtn.disabled = !hasValidDocuments || !bearerToken || !appNo;
 }
 
 function clearAll() {
@@ -252,6 +282,22 @@ async function submitDocuments() {
         return;
     }
     
+    // Validate Bearer token (required for new system)
+    const bearerTokenInput = document.getElementById('bearerToken');
+    const bearerToken = bearerTokenInput ? bearerTokenInput.value.trim() : '';
+    if (!bearerToken) {
+        showError('Bearer Token is required. Please enter your Bearer token in the configuration section.');
+        return;
+    }
+    
+    // Validate appNo (required for new system)
+    const appNoInput = document.getElementById('appNo');
+    const appNo = appNoInput ? appNoInput.value.trim() : '';
+    if (!appNo) {
+        showError('Application Number (appNo) is required. Please enter an application number.');
+        return;
+    }
+    
     // Validate all documents
     const validDocuments = documents.filter(doc => 
         doc.type && 
@@ -267,9 +313,10 @@ async function submitDocuments() {
         return;
     }
     
-    // Build request payload
+    // Build request payload (updated for new system)
     const payload = {
         service_name: 'PT5',
+        appNo: appNo,
         documents: validDocuments.map(doc => {
             // Ensure array fields are arrays (not empty arrays if they have no values)
             const actualData = { ...doc.fields };
@@ -299,22 +346,18 @@ async function submitDocuments() {
     document.getElementById('errorSection').classList.add('hidden');
     document.getElementById('submitBtn').disabled = true;
     
-    // Get API token if provided
+    // Get API token if provided (optional)
     const apiTokenInput = document.getElementById('apiToken');
     const apiToken = apiTokenInput ? apiTokenInput.value.trim() : '';
     
-    console.log('API Token from input:', apiToken ? `"${apiToken.substring(0, 3)}..." (${apiToken.length} chars)` : '(empty)');
-    
     const headers = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${bearerToken}`  // Required for new system
     };
     
-    // Add API token to headers if provided
+    // Add API token to headers if provided (optional)
     if (apiToken) {
         headers['X-API-Token'] = apiToken;
-        console.log('✅ API Token will be sent in headers');
-    } else {
-        console.warn('⚠️ API Token is empty - request may fail if API_TOKEN is set on server');
     }
     
     // Debug: Log what we're sending
@@ -344,27 +387,144 @@ async function submitDocuments() {
                 }
             }
             
-            // Special handling for 401 (missing token)
+            // Special handling for 401 (missing/invalid Bearer token)
             if (response.status === 401) {
-                errorMessage = `Authentication Error: ${errorMessage}. Please check your API token.`;
+                errorMessage = `Authentication Error: ${errorMessage}. Please check your Bearer token.`;
             }
             
             throw new Error(errorMessage);
         }
         
         const data = await response.json();
-        displayResults(data);
+        
+        // New system returns only acknowledgment, not full results
+        // Results will come via webhook, but for local testing we show the acknowledgment
+        if (data.success && data.service_name && data.appNo) {
+            // This is the new async response format
+            const testMode = document.getElementById('testMode').checked;
+            if (testMode) {
+                // Show test mode section for manual result entry
+                showAcknowledgment(data);
+                document.getElementById('testModeSection').classList.remove('hidden');
+            } else {
+                // Show acknowledgment message
+                showAcknowledgment(data);
+            }
+        } else {
+            // Old format or unexpected response - try to display as results
+            displayResults(data);
+        }
     } catch (error) {
         // Better error message handling
         let errorMsg = error.message;
         if (errorMsg === 'Failed to fetch') {
-            errorMsg = 'Failed to connect to API. Please check:\n1. API is running at the URL shown\n2. API token is correct (if required)\n3. No CORS issues';
+            errorMsg = 'Failed to connect to API. Please check:\n1. API is running at the URL shown\n2. Bearer token is correct (required)\n3. No CORS issues';
         }
         showError(`Error: ${errorMsg}`);
     } finally {
         document.getElementById('loadingSection').classList.add('hidden');
         document.getElementById('submitBtn').disabled = false;
         updateSubmitButton();
+    }
+}
+
+function showAcknowledgment(data) {
+    const resultsSection = document.getElementById('resultsSection');
+    const summarySection = document.getElementById('summarySection');
+    const detailedResults = document.getElementById('detailedResults');
+    
+    const taskId = data.task_id || 'N/A';
+    const apiUrl = document.getElementById('apiUrl').value.trim();
+    
+    summarySection.innerHTML = `
+        <div class="acknowledgment-card">
+            <h3>✅ Request Accepted</h3>
+            <p><strong>Service:</strong> ${data.service_name}</p>
+            <p><strong>Application Number:</strong> ${data.appNo}</p>
+            ${taskId !== 'N/A' ? `<p><strong>Task ID:</strong> <code style="background: var(--bg-color); padding: 2px 6px; border-radius: 3px; font-size: 0.9em;">${taskId}</code></p>` : ''}
+            <p style="margin-top: 15px; color: var(--text-secondary);">
+                Your request has been queued for processing. Results will be sent via webhook when processing completes.
+            </p>
+            ${taskId !== 'N/A' ? `
+            <div style="margin-top: 15px; padding: 10px; background: var(--bg-color); border-radius: 6px;">
+                <p style="margin: 0 0 10px 0; font-weight: 600;">For Local Testing:</p>
+                <button onclick="checkTaskResult('${taskId}', '${apiUrl}')" class="btn" style="margin-right: 10px;">Check Results</button>
+                <span style="color: var(--text-secondary); font-size: 0.9em;">or enable "Test Mode" to paste results manually</span>
+            </div>
+            ` : ''}
+            <p style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9em;">
+                <strong>Note:</strong> For local testing, enable "Test Mode" and paste the webhook response JSON manually.
+            </p>
+        </div>
+    `;
+    
+    detailedResults.innerHTML = '';
+    resultsSection.classList.remove('hidden');
+}
+
+async function checkTaskResult(taskId, apiUrl) {
+    if (!taskId || taskId === 'N/A') {
+        showError('Task ID not available');
+        return;
+    }
+    
+    try {
+        const bearerToken = document.getElementById('bearerToken')?.value.trim() || '';
+        // Get API token if provided (same as submitDocuments)
+        const apiTokenInput = document.getElementById('apiToken');
+        const apiToken = apiTokenInput ? apiTokenInput.value.trim() : '';
+        
+        const headers = {
+            'Authorization': `Bearer ${bearerToken}`,
+            'Content-Type': 'application/json'
+        };
+        
+        // Add API token to headers if provided (required for /api endpoints)
+        if (apiToken) {
+            headers['X-API-Token'] = apiToken;
+        }
+        
+        const response = await fetch(`${apiUrl}/api/v1/task/${taskId}`, {
+            method: 'GET',
+            headers: headers
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'completed' && data.result) {
+            // Display the results
+            displayResults(data.result);
+            // Hide test mode section if it was shown
+            document.getElementById('testModeSection').classList.add('hidden');
+        } else if (data.status === 'pending') {
+            alert('Task is still being processed. Please wait a moment and try again.');
+        } else if (data.status === 'failed') {
+            showError(`Task failed: ${data.error || 'Unknown error'}`);
+        } else {
+            showError(`Unexpected response: ${JSON.stringify(data)}`);
+        }
+    } catch (error) {
+        showError(`Error checking task result: ${error.message}`);
+    }
+}
+
+function processManualResults() {
+    const manualResultsText = document.getElementById('manualResults').value.trim();
+    if (!manualResultsText) {
+        showError('Please paste the webhook response JSON');
+        return;
+    }
+    
+    try {
+        const data = JSON.parse(manualResultsText);
+        displayResults(data);
+        document.getElementById('testModeSection').classList.add('hidden');
+    } catch (error) {
+        showError(`Invalid JSON: ${error.message}`);
     }
 }
 
@@ -391,12 +551,6 @@ function displayResults(data) {
             <h4>Average Accuracy</h4>
             <div class="value ${getAccuracyClass(data.average_accuracy)}">${formatAccuracy(data.average_accuracy)}</div>
         </div>
-        ${data.processing_time_seconds ? `
-        <div class="summary-card">
-            <h4>Processing Time</h4>
-            <div class="value">${data.processing_time_seconds.toFixed(2)}s</div>
-        </div>
-        ` : ''}
     `;
     
     // Display detailed results

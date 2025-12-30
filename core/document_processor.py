@@ -505,7 +505,11 @@ Note: This document has {len(pdf_images)} page(s). Please analyze all pages and 
                 raise ValueError("No response content received from model")
                 
         except HttpResponseError as e:
-            error_msg = f"HTTP Error {e.status_code}: {e.message}"
+            # Provide more helpful error messages
+            if e.status_code == 401:
+                error_msg = f"Authentication failed (401): GITHUB_TOKEN is invalid or expired. Please check your .env file and ensure GITHUB_TOKEN is set correctly."
+            else:
+                error_msg = f"HTTP Error {e.status_code}: {e.message}"
             if progress_callback:
                 progress_callback(f"❌ Error: {error_msg}")
             return {

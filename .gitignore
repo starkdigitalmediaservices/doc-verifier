@@ -32,18 +32,82 @@ venv.bak/
 .env.local
 .env.*.local
 
-# IDE
+# IDE and Editor files
 .vscode/
 .idea/
+.cursor/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
 *.swp
 *.swo
 *~
 
-# OS
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Linting
+.ruff_cache/
+.flake8
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Docker volumes and data
+docker-data/
+*.pid
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Redis dump
+dump.rdb
+
+# Local development
+local/
+tmp/
+temp/
 
 # Project specific
 Helper Documentation/
 Documentation/
-.cursor/
