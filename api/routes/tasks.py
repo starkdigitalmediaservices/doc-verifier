@@ -126,21 +126,34 @@ def process_docs(data: Dict):
         }
         
         # Post to webhook if configured
+        # IMPORTANT: Webhook failures should NOT affect task result
+        # Results are always returned even if webhook fails
         settings = get_settings()
         if settings.webhook_enable:
             if settings.webhook_url:
-                response = post_data_via_webhook(
-                    url=settings.webhook_url,
-                    data=response_data,
-                    timeout=350,
-                    headers={
-                        "Authorization": f"Bearer {settings.webhook_token}",
-                        "Accept": "application/json",
-                    }
-                )
-                print("Webhook Response:", response)
+                try:
+                    response = post_data_via_webhook(
+                        url=settings.webhook_url,
+                        data=response_data,
+                        timeout=350,
+                        headers={
+                            "Authorization": f"Bearer {settings.webhook_token}",
+                            "Accept": "application/json",
+                        }
+                    )
+                    print("✅ Webhook Response:", response.status_code)
+                except Exception as webhook_error:
+                    # Log webhook error but don't fail the task
+                    print(f"⚠️  Webhook delivery failed (results still available): {webhook_error}")
+                    print(f"   Results: {len(results)} documents processed successfully")
+                    # Add webhook error to response but keep success=True
+                    response_data["webhook_error"] = str(webhook_error)
             else:
-                print("Webhook url is missing, Please add it into the .env")
+                print("⚠️  Webhook url is missing, Please add it into the .env")
+        else:
+            # Webhook not enabled - log results for local testing
+            print(f"📋 Processing complete: {successful} successful, {failed} failed")
+            print(f"   Results available (webhook disabled for local testing)")
         
         return response_data
         
