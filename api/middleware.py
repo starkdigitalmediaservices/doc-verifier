@@ -56,8 +56,20 @@ class APITokenMiddleware(BaseHTTPMiddleware):
                     detail="Missing bearer token. Please include Authorization header.",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
+            
+            # Validate Authorization header format (must start with "Bearer ")
+            if not bearer_token.startswith("Bearer "):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid Authorization header format. Expected: 'Bearer <token>'",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            # Extract token value (use maxsplit=1 for safety)
+            bearer_token_value = bearer_token.split(" ", 1)[1]
+            
             # Validate token
-            if bearer_token.split(" ")[1] != settings.bearer_token:
+            if bearer_token_value != settings.bearer_token:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Invalid bearer token.",

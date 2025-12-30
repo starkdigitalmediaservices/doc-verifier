@@ -9,12 +9,60 @@ from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
 from pathlib import Path
+import sys
 from config import get_settings
 from api.routes import verification
 from api.middleware import APITokenMiddleware, get_swagger_login_page
 
 # Get settings
 settings = get_settings()
+
+
+def validate_required_settings():
+    """
+    Validate that all required environment variables are set at startup.
+    This provides clear error messages before the server starts.
+    """
+    errors = []
+    
+    # Required settings
+    if not settings.github_token:
+        errors.append("GITHUB_TOKEN is required but not set in environment variables")
+    
+    # Note: BEARER_TOKEN is optional - if not set, API protection is disabled
+    # This is intentional for backward compatibility
+    
+    # Celery settings validation
+    if not settings.celery_broker_url:
+        errors.append("CELERY_BROKER_URL is required but not set in environment variables")
+    
+    if not settings.celery_result_backend:
+        errors.append("CELERY_RESULT_BACKEND is required but not set in environment variables")
+    
+    # Webhook validation (only if enabled)
+    if settings.webhook_enable:
+        if not settings.webhook_url:
+            errors.append("WEBHOOK_URL is required when WEBHOOK_ENABLE=true but not set")
+        if not settings.webhook_token:
+            errors.append("WEBHOOK_TOKEN is required when WEBHOOK_ENABLE=true but not set")
+    
+    if errors:
+        error_message = "\n".join([f"  ❌ {error}" for error in errors])
+        print("\n" + "=" * 60, file=sys.stderr)
+        print("🚨 STARTUP VALIDATION FAILED", file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+        print("Missing required environment variables:\n", file=sys.stderr)
+        print(error_message, file=sys.stderr)
+        print("\nPlease set these variables in your .env file or environment.", file=sys.stderr)
+        print("=" * 60 + "\n", file=sys.stderr)
+        sys.exit(1)
+    
+    # Success message (only in development/debug mode)
+    print("✅ Startup validation passed - all required settings are configured")
+
+
+# Validate settings at startup
+validate_required_settings()
 
 # Create FastAPI app
 app = FastAPI(
