@@ -90,6 +90,11 @@ dmypy.json
 docker-data/
 *.pid
 
+# Docker scripts
+docker_clean_rebuild.sh
+docker_cleanup.sh
+docker_fix.sh
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
