@@ -4,16 +4,20 @@ services:
     container_name: doc-verifier-redis
     ports:
       - "6379:6379"
+    # Use Redis configuration file for reliable settings
+    command: redis-server /etc/redis/redis.conf
     volumes:
-      - redis-data:/data
+      - ./redis.conf:/etc/redis/redis.conf:ro
     networks:
       - doc-verifier-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Test Redis is accepting connections and verify bind config
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG && redis-cli CONFIG GET bind | grep -q 0.0.0.0"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
 
   api:
     build:
@@ -70,9 +74,16 @@ services:
       - WEBHOOK_ENABLE=${WEBHOOK_ENABLE:-false}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-}
+      # Temporary directory configuration for PyTorch/transformers
+      - TMPDIR=/tmp
+      - TMP=/tmp
     volumes:
       # Mount prompts directory if you want to edit prompts without rebuilding
       - ./prompts:/app/prompts:ro
+    tmpfs:
+      # Mount /tmp as tmpfs with 2GB space to prevent "No space left" errors
+      # PyTorch/transformers libraries create temporary directories during import
+      - /tmp:rw,noexec,nosuid,size=2g
     depends_on:
       redis:
         condition: service_healthy
@@ -91,6 +102,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: doc-verifier-worker
+    # Wait for Redis healthcheck, then start Celery (depends_on ensures Redis is healthy)
     command: celery -A core.celery worker --loglevel=info --concurrency=2
     environment:
       # GitHub Models API
@@ -140,19 +152,30 @@ services:
       - WEBHOOK_ENABLE=${WEBHOOK_ENABLE:-false}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_TOKEN=${WEBHOOK_TOKEN:-}
+      # Temporary directory configuration for PyTorch/transformers
+      - TMPDIR=/tmp
+      - TMP=/tmp
     volumes:
       - ./prompts:/app/prompts:ro
+    tmpfs:
+      # Mount /tmp as tmpfs with 2GB space to prevent "No space left" errors
+      # PyTorch/transformers libraries create temporary directories during import
+      - /tmp:rw,noexec,nosuid,size=2g
     depends_on:
       redis:
         condition: service_healthy
       api:
         condition: service_started
+    # Give Redis extra time after healthcheck passes
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
     restart: unless-stopped
     networks:
       - doc-verifier-network
-
-volumes:
-  redis-data:
 
 networks:
   doc-verifier-network:

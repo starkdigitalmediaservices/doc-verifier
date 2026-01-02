@@ -15,6 +15,9 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir --user -r requirements.txt
 
+# Verify celery is installed (helps catch issues early)
+RUN python -c "import celery; print(f'Celery version: {celery.__version__}')" || (echo "ERROR: Celery installation failed" && exit 1)
+
 # Final stage
 FROM python:3.11-slim
 
@@ -35,8 +38,9 @@ RUN useradd -m -u 1000 appuser && \
 # Set working directory
 WORKDIR /app
 
-# Copy Python packages from builder
-COPY --from=builder /root/.local /home/appuser/.local
+# Copy Python packages from builder stage
+# Use --chown to ensure proper ownership
+COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 
 # Copy application code
 COPY --chown=appuser:appuser . .
@@ -44,8 +48,13 @@ COPY --chown=appuser:appuser . .
 # Switch to non-root user
 USER appuser
 
-# Add local bin to PATH
-ENV PATH=/home/appuser/.local/bin:$PATH
+# Add local bin to PATH and ensure Python can find user-installed packages
+ENV PATH=/home/appuser/.local/bin:$PATH \
+    PYTHONPATH=/home/appuser/.local/lib/python3.11/site-packages:$PYTHONPATH
+
+# Verify critical packages are accessible (celery, fastapi, uvicorn)
+RUN python -c "import celery, fastapi, uvicorn; print('✓ All critical packages imported successfully')" || \
+    (echo "ERROR: Failed to import critical packages. Check installation." && exit 1)
 
 # Expose port
 EXPOSE 5002

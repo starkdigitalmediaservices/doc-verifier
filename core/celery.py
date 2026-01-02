@@ -20,6 +20,26 @@ celery_app.conf.update(
     enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    # Connection settings to handle Redis connection issues
+    broker_connection_retry_on_startup=True,
+    broker_connection_retry=True,
+    broker_connection_max_retries=100,  # Increase retries
+    broker_connection_retry_delay=2.0,  # Delay between retries
+    broker_transport_options={
+        'max_connections': 10,
+        'retry_policy': {
+            'timeout': 10.0,  # Increase timeout
+            'max_retries': 10,
+        },
+        'visibility_timeout': 3600,
+        'fanout_prefix': True,
+        'fanout_patterns': True,
+        'socket_keepalive': True,
+        'socket_keepalive_options': {},
+    },
+    # Add connection pool settings
+    broker_pool_limit=10,
+    broker_connection_timeout=10.0,
 )
 
 # Create alias for easy import: from core.celery import _celery
