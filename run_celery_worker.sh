@@ -25,6 +25,15 @@ if command -v redis-cli &> /dev/null; then
     fi
 fi
 
+# Activate virtual environment if it exists
+if [ -d "venv" ]; then
+    echo "✅ Activating virtual environment (venv)..."
+    source venv/bin/activate
+elif [ -d ".venv" ]; then
+    echo "✅ Activating virtual environment (.venv)..."
+    source .venv/bin/activate
+fi
+
 echo "🚀 Starting Celery worker..."
 echo "   Press Ctrl+C to stop"
 echo ""

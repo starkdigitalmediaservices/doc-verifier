@@ -112,6 +112,8 @@ Visit: http://localhost:8081
 
 ## 📚 Documentation
 
+- **[PMC_RTS_INTEGRATION_GUIDE.md](PMC_RTS_INTEGRATION_GUIDE.md)**: Complete integration guide for PMC/RTS developers ⭐
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)**: Quick reference card for API integration
 - **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**: Complete deployment guide (local & production)
 - **[CHANGES_ANALYSIS.md](CHANGES_ANALYSIS.md)**: Detailed analysis of backend upgrades
 - **[API_FORMAT_COMPARISON.md](API_FORMAT_COMPARISON.md)**: Old vs New API format comparison

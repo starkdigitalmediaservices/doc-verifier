@@ -96,9 +96,23 @@ cleanup() {
 # Trap Ctrl+C
 trap cleanup SIGINT SIGTERM
 
+# Detect and activate virtual environment
+if [ -d "venv" ]; then
+    echo "   Activating virtual environment..."
+    source venv/bin/activate
+    VENV_PREFIX="venv/bin/"
+elif [ -d ".venv" ]; then
+    echo "   Activating virtual environment..."
+    source .venv/bin/activate
+    VENV_PREFIX=".venv/bin/"
+else
+    echo -e "${YELLOW}⚠️  No virtual environment found, using system Python${NC}"
+    VENV_PREFIX=""
+fi
+
 # Start API server in background
 echo "   Starting API server (port 5002)..."
-uvicorn api.main:app --host 0.0.0.0 --port 5002 --reload > /tmp/api.log 2>&1 &
+${VENV_PREFIX}uvicorn api.main:app --host 0.0.0.0 --port 5002 --reload > /tmp/api.log 2>&1 &
 API_PID=$!
 
 # Wait a moment for API to start
@@ -115,7 +129,7 @@ echo -e "${GREEN}   ✅ API server started (PID: $API_PID)${NC}"
 
 # Start Celery worker in background
 echo "   Starting Celery worker..."
-celery -A core.celery worker --loglevel=info --concurrency=2 > /tmp/celery.log 2>&1 &
+${VENV_PREFIX}celery -A core.celery worker --loglevel=info --concurrency=2 > /tmp/celery.log 2>&1 &
 CELERY_PID=$!
 
 # Wait a moment for Celery to start

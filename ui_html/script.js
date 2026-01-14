@@ -29,6 +29,15 @@ const documents = [];
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    // Auto-detect API URL from current page URL
+    const apiUrlInput = document.getElementById('apiUrl');
+    if (apiUrlInput && !apiUrlInput.value) {
+        // Get current origin (protocol + host + port)
+        const currentOrigin = window.location.origin;
+        apiUrlInput.value = currentOrigin;
+        apiUrlInput.placeholder = currentOrigin;
+    }
+    
     document.getElementById('addDocumentBtn').addEventListener('click', addDocument);
     document.getElementById('submitBtn').addEventListener('click', submitDocuments);
     document.getElementById('clearBtn').addEventListener('click', clearAll);
