@@ -24,10 +24,13 @@ FROM python:3.11-slim
 # Install runtime system dependencies
 # poppler-utils is needed for pdf2image
 # libglib2.0-0 is needed for image processing libraries
-# Note: libgl1-mesa-glx is not available in newer Debian, removed as it's not essential
+# libgl1 is needed for OpenCV (replaces libgl1-mesa-glx in newer Debian)
+# libgthread-2.0-0 is needed for OpenCV threading
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     libglib2.0-0 \
+    libgl1 \
+    libgthread-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
