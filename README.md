@@ -135,17 +135,27 @@ This system has been upgraded to use **asynchronous processing**:
 
 See [CHANGES_ANALYSIS.md](CHANGES_ANALYSIS.md) for complete details.
 
-## 🔧 Token Optimization
+## 🔧 Preprocessing Configuration
 
-Control token optimization per document type via `.env`:
+Control preprocessing pipeline per document type via `.env`:
 
 ```env
-# Disable for Index 2 (keeps full resolution)
-TOKEN_OPTIMIZATION_INDEX_2=false
+# Preprocessing modes:
+# 0 = No preprocessing (use original image)
+# 1 = Token optimization (resize/compress for token reduction)
+# 2 = Quality enhancement (AI-powered quality improvement)
 
-# Enable for NOC and No Dues (reduces tokens by 60-80%)
-TOKEN_OPTIMIZATION_NOC=true
-TOKEN_OPTIMIZATION_NO_DUES=true
+# Index 2: No preprocessing (keeps full resolution)
+PREPROCESSING_INDEX_2=0
+
+# NOC and No Dues: Token optimization (reduces tokens by 60-80%)
+PREPROCESSING_NOC=1
+PREPROCESSING_NO_DUES=1
+
+# To use quality enhancement instead:
+# PREPROCESSING_INDEX_2=2
+# PREPROCESSING_NOC=2
+# PREPROCESSING_NO_DUES=2
 ```
 
 ## 🔌 API Usage

@@ -26,6 +26,7 @@ except ImportError:
     PDF_SUPPORT = False
 
 from config import Settings, get_settings
+from core.preprocessing import PreprocessingPipeline, PreprocessingMode
 
 
 class DocumentProcessor:
@@ -62,6 +63,7 @@ class DocumentProcessor:
         self.model_name = model_name
         self.document_type = document_type
         self.settings = settings or get_settings()
+        self.preprocessor = PreprocessingPipeline(settings=self.settings)
         self.client = None
         self._initialize_client()
     
@@ -75,128 +77,44 @@ class DocumentProcessor:
             credential=AzureKeyCredential(self.settings.github_token),
         )
     
-    def _should_optimize_image(self) -> bool:
+    def _get_preprocessing_mode(self) -> PreprocessingMode:
         """
-        Check if image optimization should be applied based on document type and settings
+        Get preprocessing mode based on document type and settings
         
         Returns:
-            True if optimization should be enabled, False otherwise
+            PreprocessingMode enum value (NONE, TOKEN_OPTIMIZATION, or QUALITY_ENHANCEMENT)
         """
         if not self.document_type:
-            return True  # Default to enabled if no document type specified
+            return PreprocessingMode.TOKEN_OPTIMIZATION  # Default to token optimization
         
-        return self.settings.get_token_optimization(self.document_type)
+        mode_value = self.settings.get_preprocessing_mode(self.document_type)
+        return PreprocessingMode(mode_value)
     
-    def _optimize_image(self, image_path: Path) -> Image.Image:
+    def _preprocess_image(self, image_path: Path) -> Image.Image:
         """
-        Optimize image for token efficiency by resizing and compressing
+        Preprocess image based on document type and settings
         
         Args:
             image_path: Path to the image file
             
         Returns:
-            Optimized PIL Image object
+            Preprocessed PIL Image object
         """
-        # Load image
-        img = Image.open(image_path)
-        
-        # Convert to RGB if needed (for JPEG compatibility)
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
-            img = background
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # Auto-rotate based on EXIF data
-        try:
-            from PIL import ImageOps
-            img = ImageOps.exif_transpose(img)
-        except Exception:
-            pass
-        
-        # Auto-crop whitespace if enabled
-        if self.settings.enable_auto_crop:
-            try:
-                gray = img.convert('L')
-                bbox = gray.getbbox()
-                if bbox:
-                    img = img.crop(bbox)
-            except Exception:
-                pass
-        
-        # Convert to grayscale if enabled
-        if self.settings.enable_grayscale:
-            img = img.convert('L').convert('RGB')
-        
-        # Resize if image exceeds max dimensions (maintain aspect ratio)
-        width, height = img.size
-        if width > self.settings.max_image_width or height > self.settings.max_image_height:
-            ratio = min(
-                self.settings.max_image_width / width, 
-                self.settings.max_image_height / height
-            )
-            new_width = int(width * ratio)
-            new_height = int(height * ratio)
-            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        return img
+        mode = self._get_preprocessing_mode()
+        return self.preprocessor.preprocess_from_path(image_path, mode)
     
-    def _optimize_image_from_pil(self, img: Image.Image) -> Image.Image:
+    def _preprocess_image_from_pil(self, img: Image.Image) -> Image.Image:
         """
-        Optimize a PIL Image object (same logic as _optimize_image but for in-memory images)
+        Preprocess a PIL Image object based on document type and settings
         
         Args:
             img: PIL Image object
             
         Returns:
-            Optimized PIL Image object
+            Preprocessed PIL Image object
         """
-        # Convert to RGB if needed
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
-            img = background
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # Auto-rotate based on EXIF data
-        try:
-            from PIL import ImageOps
-            img = ImageOps.exif_transpose(img)
-        except Exception:
-            pass
-        
-        # Auto-crop whitespace if enabled
-        if self.settings.enable_auto_crop:
-            try:
-                gray = img.convert('L')
-                bbox = gray.getbbox()
-                if bbox:
-                    img = img.crop(bbox)
-            except Exception:
-                pass
-        
-        # Convert to grayscale if enabled
-        if self.settings.enable_grayscale:
-            img = img.convert('L').convert('RGB')
-        
-        # Resize if image exceeds max dimensions
-        width, height = img.size
-        if width > self.settings.max_image_width or height > self.settings.max_image_height:
-            ratio = min(
-                self.settings.max_image_width / width,
-                self.settings.max_image_height / height
-            )
-            new_width = int(width * ratio)
-            new_height = int(height * ratio)
-            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        return img
+        mode = self._get_preprocessing_mode()
+        return self.preprocessor.preprocess(img, mode)
     
     def _encode_optimized_image(self, img: Image.Image) -> str:
         """Encode optimized PIL Image to base64 JPEG string"""
@@ -220,22 +138,14 @@ class DocumentProcessor:
         Returns:
             ImageUrl object
         """
-        if self._should_optimize_image():
-            try:
-                optimized_img = self._optimize_image_from_pil(img)
-                image_base64 = self._encode_optimized_image(optimized_img)
-                data_url = f"data:image/jpeg;base64,{image_base64}"
-                return ImageUrl(url=data_url)
-            except Exception as e:
-                # Fallback to non-optimized
-                buffer = io.BytesIO()
-                img.save(buffer, format='JPEG', quality=self.settings.jpeg_quality)
-                buffer.seek(0)
-                image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
-                data_url = f"data:image/jpeg;base64,{image_base64}"
-                return ImageUrl(url=data_url)
-        else:
-            # Direct encoding without optimization
+        try:
+            # Apply preprocessing based on mode
+            preprocessed_img = self._preprocess_image_from_pil(img)
+            image_base64 = self._encode_optimized_image(preprocessed_img)
+            data_url = f"data:image/jpeg;base64,{image_base64}"
+            return ImageUrl(url=data_url)
+        except Exception as e:
+            # Fallback to non-preprocessed
             buffer = io.BytesIO()
             img.save(buffer, format='JPEG', quality=self.settings.jpeg_quality)
             buffer.seek(0)
@@ -244,41 +154,38 @@ class DocumentProcessor:
             return ImageUrl(url=data_url)
     
     def _get_image_url(self, image_path: Path) -> ImageUrl:
-        """Create ImageUrl object from image file with optional optimization"""
-        if self._should_optimize_image():
-            try:
-                optimized_img = self._optimize_image(image_path)
-                image_base64 = self._encode_optimized_image(optimized_img)
-                data_url = f"data:image/jpeg;base64,{image_base64}"
-                return ImageUrl(url=data_url)
-            except Exception as e:
-                # Fallback to original method
-                pass
-        
-        # Original method (no optimization or fallback)
-        ext = image_path.suffix.lower()
-        image_format_map = {
-            '.png': 'png',
-            '.jpg': 'jpeg',
-            '.jpeg': 'jpeg',
-            '.gif': 'gif',
-            '.webp': 'webp'
-        }
-        image_format = image_format_map.get(ext, 'jpeg')
-        
+        """Create ImageUrl object from image file with preprocessing"""
         try:
-            image_url = ImageUrl.load(
-                image_file=str(image_path),
-                image_format=image_format
-            )
-            return image_url
-        except Exception:
-            # Fallback: create manually
-            with open(image_path, "rb") as f:
-                image_base64 = base64.b64encode(f.read()).decode('utf-8')
-            mime_type = f'image/{image_format}'
-            data_url = f"data:{mime_type};base64,{image_base64}"
+            # Apply preprocessing based on mode
+            preprocessed_img = self._preprocess_image(image_path)
+            image_base64 = self._encode_optimized_image(preprocessed_img)
+            data_url = f"data:image/jpeg;base64,{image_base64}"
             return ImageUrl(url=data_url)
+        except Exception as e:
+            # Fallback to original method
+            ext = image_path.suffix.lower()
+            image_format_map = {
+                '.png': 'png',
+                '.jpg': 'jpeg',
+                '.jpeg': 'jpeg',
+                '.gif': 'gif',
+                '.webp': 'webp'
+            }
+            image_format = image_format_map.get(ext, 'jpeg')
+            
+            try:
+                image_url = ImageUrl.load(
+                    image_file=str(image_path),
+                    image_format=image_format
+                )
+                return image_url
+            except Exception:
+                # Fallback: create manually
+                with open(image_path, "rb") as f:
+                    image_base64 = base64.b64encode(f.read()).decode('utf-8')
+                mime_type = f'image/{image_format}'
+                data_url = f"data:{mime_type};base64,{image_base64}"
+                return ImageUrl(url=data_url)
     
     def _detect_file_type(self, file_path: Path) -> str:
         """

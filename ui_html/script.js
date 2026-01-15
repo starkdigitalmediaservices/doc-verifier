@@ -31,11 +31,16 @@ const documents = [];
 document.addEventListener('DOMContentLoaded', () => {
     // Auto-detect API URL from current page URL
     const apiUrlInput = document.getElementById('apiUrl');
-    if (apiUrlInput && !apiUrlInput.value) {
+    if (apiUrlInput) {
         // Get current origin (protocol + host + port)
         const currentOrigin = window.location.origin;
-        apiUrlInput.value = currentOrigin;
-        apiUrlInput.placeholder = currentOrigin;
+        // Always set both value and placeholder to ensure it's available
+        if (!apiUrlInput.value || apiUrlInput.value.trim() === '') {
+            apiUrlInput.value = currentOrigin;
+        }
+        if (!apiUrlInput.placeholder || apiUrlInput.placeholder.trim() === '') {
+            apiUrlInput.placeholder = currentOrigin;
+        }
     }
     
     document.getElementById('addDocumentBtn').addEventListener('click', addDocument);
@@ -285,7 +290,17 @@ function clearAll() {
 }
 
 async function submitDocuments() {
-    const apiUrl = document.getElementById('apiUrl').value.trim();
+    const apiUrlInput = document.getElementById('apiUrl');
+    let apiUrl = apiUrlInput.value.trim();
+    
+    // If empty, try to use placeholder or auto-detect
+    if (!apiUrl) {
+        apiUrl = apiUrlInput.placeholder.trim() || window.location.origin;
+        if (apiUrl) {
+            apiUrlInput.value = apiUrl;
+        }
+    }
+    
     if (!apiUrl) {
         showError('Please provide an API URL');
         return;

@@ -1,6 +1,6 @@
 """
 Settings management from environment variables
-Handles token optimization toggles per document type
+Handles preprocessing mode configuration per document type
 """
 
 import os
@@ -9,9 +9,12 @@ from functools import lru_cache
 
 try:
     from pydantic_settings import BaseSettings
+    from pydantic import ConfigDict
+    PYDANTIC_V2 = True
 except ImportError:
     # Fallback for older pydantic versions
     from pydantic import BaseSettings
+    PYDANTIC_V2 = False
 
 
 class Settings(BaseSettings):
@@ -26,11 +29,12 @@ class Settings(BaseSettings):
     default_max_tokens: int = 2000
     api_timeout_seconds: int = 120
     
-    # Token Optimization Toggle (per document type)
-    # These can be set in .env as: TOKEN_OPTIMIZATION_INDEX_2=false
-    token_optimization_index_2: bool = False
-    token_optimization_noc: bool = True
-    token_optimization_no_dues: bool = True
+    # Preprocessing Mode (per document type)
+    # 0 = No preprocessing, 1 = Token optimization (resize/compress), 2 = Quality enhancement
+    # These can be set in .env as: PREPROCESSING_INDEX_2=0
+    preprocessing_index_2: int = 0
+    preprocessing_noc: int = 1
+    preprocessing_no_dues: int = 1
     
     # Image Optimization Settings (when enabled)
     max_image_width: int = 1536
@@ -65,50 +69,66 @@ class Settings(BaseSettings):
     webhook_token: str = ""
     webhook_enable: bool = False
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    # Pydantic v2 syntax (works with pydantic_settings)
+    if ConfigDict is not None:
+        model_config = ConfigDict(
+            env_file=".env",
+            case_sensitive=False,
+            extra="ignore"  # Ignore extra environment variables (e.g., preprocessing config vars)
+        )
+    else:
+        # Pydantic v1 syntax (fallback)
+        class Config:
+            env_file = ".env"
+            case_sensitive = False
+            extra = "ignore"  # Ignore extra environment variables (e.g., preprocessing config vars)
 
-    def get_token_optimization(self, document_type: str) -> bool:
+    def get_preprocessing_mode(self, document_type: str) -> int:
         """
-        Get token optimization setting for a specific document type
+        Get preprocessing mode for a specific document type
         
         Args:
             document_type: Document type name (e.g., "Index 2", "NOC", "No Dues")
             
         Returns:
-            True if optimization should be enabled, False otherwise
+            Preprocessing mode: 0 (none), 1 (token optimization), or 2 (quality enhancement)
         """
         # Normalize document type name for env variable lookup
         doc_type_normalized = document_type.upper().replace(" ", "_").replace("-", "_")
         
         # Check for specific env variable
-        env_var = f"TOKEN_OPTIMIZATION_{doc_type_normalized}"
+        env_var = f"PREPROCESSING_{doc_type_normalized}"
         value = os.getenv(env_var)
         
         if value is not None:
-            return value.lower() in ("true", "1", "yes", "on")
+            try:
+                mode = int(value)
+                # Validate mode is 0, 1, or 2
+                if mode in (0, 1, 2):
+                    return mode
+            except ValueError:
+                pass  # Fall back to defaults
         
         # Fallback to default based on document type
-        optimization_map = {
-            "INDEX_2": self.token_optimization_index_2,
-            "NOC": self.token_optimization_noc,
-            "NO_DUES": self.token_optimization_no_dues,
+        preprocessing_map = {
+            "INDEX_2": self.preprocessing_index_2,
+            "NOC": self.preprocessing_noc,
+            "NO_DUES": self.preprocessing_no_dues,
         }
         
-        return optimization_map.get(doc_type_normalized, True)
+        return preprocessing_map.get(doc_type_normalized, 1)  # Default to token optimization
     
-    def get_optimization_config(self) -> Dict[str, bool]:
+    def get_preprocessing_config(self) -> Dict[str, int]:
         """
-        Get all token optimization settings as a dictionary
+        Get all preprocessing mode settings as a dictionary
         
         Returns:
-            Dictionary mapping document types to optimization enabled status
+            Dictionary mapping document types to preprocessing modes (0, 1, or 2)
         """
         return {
-            "Index 2": self.get_token_optimization("Index 2"),
-            "NOC": self.get_token_optimization("NOC"),
-            "No Dues": self.get_token_optimization("No Dues"),
+            "Index 2": self.get_preprocessing_mode("Index 2"),
+            "NOC": self.get_preprocessing_mode("NOC"),
+            "No Dues": self.get_preprocessing_mode("No Dues"),
         }
 
 

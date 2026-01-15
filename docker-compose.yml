@@ -36,10 +36,11 @@ services:
       - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-2000}
       - API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-120}
       
-      # Token Optimization (per document type)
-      - TOKEN_OPTIMIZATION_INDEX_2=${TOKEN_OPTIMIZATION_INDEX_2:-false}
-      - TOKEN_OPTIMIZATION_NOC=${TOKEN_OPTIMIZATION_NOC:-true}
-      - TOKEN_OPTIMIZATION_NO_DUES=${TOKEN_OPTIMIZATION_NO_DUES:-true}
+      # Preprocessing Mode (per document type)
+      # 0 = No preprocessing, 1 = Token optimization, 2 = Quality enhancement
+      - PREPROCESSING_INDEX_2=${PREPROCESSING_INDEX_2:-0}
+      - PREPROCESSING_NOC=${PREPROCESSING_NOC:-1}
+      - PREPROCESSING_NO_DUES=${PREPROCESSING_NO_DUES:-1}
       
       # Image Optimization Settings
       - MAX_IMAGE_WIDTH=${MAX_IMAGE_WIDTH:-1536}
@@ -114,10 +115,11 @@ services:
       - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-2000}
       - API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-120}
       
-      # Token Optimization (per document type)
-      - TOKEN_OPTIMIZATION_INDEX_2=${TOKEN_OPTIMIZATION_INDEX_2:-false}
-      - TOKEN_OPTIMIZATION_NOC=${TOKEN_OPTIMIZATION_NOC:-true}
-      - TOKEN_OPTIMIZATION_NO_DUES=${TOKEN_OPTIMIZATION_NO_DUES:-true}
+      # Preprocessing Mode (per document type)
+      # 0 = No preprocessing, 1 = Token optimization, 2 = Quality enhancement
+      - PREPROCESSING_INDEX_2=${PREPROCESSING_INDEX_2:-0}
+      - PREPROCESSING_NOC=${PREPROCESSING_NOC:-1}
+      - PREPROCESSING_NO_DUES=${PREPROCESSING_NO_DUES:-1}
       
       # Image Optimization Settings
       - MAX_IMAGE_WIDTH=${MAX_IMAGE_WIDTH:-1536}
