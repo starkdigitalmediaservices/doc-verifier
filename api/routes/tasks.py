@@ -4,6 +4,7 @@ Celery tasks for document verification
 import asyncio
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -72,6 +73,7 @@ def process_docs(data: Dict):
         
         # Process all documents
         results: List[Dict[str, Any]] = []
+        total_start_time = time.time()
         
         for doc_info in documents:
             # doc_info is already a dict from Celery serialization
@@ -80,22 +82,28 @@ def process_docs(data: Dict):
                 # Convert to dict if it's still a model
                 doc_info = doc_info.dict() if hasattr(doc_info, 'dict') else dict(doc_info)
             
+            doc_start_time = time.time()
             try:
                 result_dict = process_single_document_sync(
                     doc_info=doc_info,
                     service_name=service_name,
                     temp_dir=temp_dir
                 )
+                # Ensure processing_time is included (it should be from process_single_document)
+                if "processing_time" not in result_dict or result_dict["processing_time"] is None:
+                    result_dict["processing_time"] = time.time() - doc_start_time
                 results.append(result_dict)
             except Exception as e:
                 # Handle individual document errors gracefully
+                doc_processing_time = time.time() - doc_start_time
                 error_result = {
                     "document_type": doc_info.get("document_type", "Unknown"),
                     "document_url": doc_info.get("download_url", ""),
                     "success": False,
                     "accuracy": 0.0,
                     "fields_accuracy": {},
-                    "error": f"Processing error: {str(e)}"
+                    "error": f"Processing error: {str(e)}",
+                    "processing_time": doc_processing_time
                 }
                 results.append(error_result)
         
@@ -114,6 +122,8 @@ def process_docs(data: Dict):
         except Exception:
             pass  # Ignore cleanup errors
         
+        total_processing_time = time.time() - total_start_time
+        
         response_data = {
             "success": True,
             "service_name": service_name,
@@ -122,7 +132,8 @@ def process_docs(data: Dict):
             "failed": failed,
             "average_accuracy": avg_accuracy,
             "results": results,
-            "task_id": task_id
+            "task_id": task_id,
+            "total_processing_time": total_processing_time
         }
         
         # Post to webhook if configured

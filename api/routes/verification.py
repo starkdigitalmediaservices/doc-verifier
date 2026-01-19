@@ -46,6 +46,8 @@ async def process_single_document(
     Returns:
         DocumentResult with accuracy information
     """
+    start_time = time.time()
+    
     settings = get_settings()
     doc_registry = get_document_registry()
     service_registry = get_service_registry()
@@ -118,6 +120,7 @@ async def process_single_document(
         )
         
         if not result.get("success", False):
+            processing_time = time.time() - start_time
             return DocumentResult(
                 document_type=document_type,
                 document_url=str(download_url),
@@ -125,7 +128,8 @@ async def process_single_document(
                 accuracy=0.0,
                 fields_accuracy={},
                 error=result.get("error", "Unknown error"),
-                llm_output=result.get("content", "")
+                llm_output=result.get("content", ""),
+                processing_time=processing_time
             )
         
         llm_output = result.get("content", "")
@@ -149,6 +153,7 @@ async def process_single_document(
                 details=field_data.get("details")
             )
         
+        processing_time = time.time() - start_time
         return DocumentResult(
             document_type=document_type,
             document_url=str(download_url),
@@ -156,17 +161,20 @@ async def process_single_document(
             accuracy=accuracy_result["accuracy"],
             fields_accuracy=fields_accuracy,
             extracted_fields=accuracy_result.get("extracted_fields", {}),
-            llm_output=llm_output
+            llm_output=llm_output,
+            processing_time=processing_time
         )
         
     except Exception as e:
+        processing_time = time.time() - start_time
         return DocumentResult(
             document_type=document_type,
             document_url=str(download_url),
             success=False,
             accuracy=0.0,
             fields_accuracy={},
-            error=f"Processing error: {str(e)}"
+            error=f"Processing error: {str(e)}",
+            processing_time=processing_time
         )
     finally:
         if processor:

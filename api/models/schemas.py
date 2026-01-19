@@ -59,6 +59,7 @@ class DocumentResult(BaseModel):
     extracted_fields: Dict[str, str] = Field(default_factory=dict, description="Extracted fields from LLM")
     error: Optional[str] = Field(None, description="Error message if processing failed")
     llm_output: Optional[str] = Field(None, description="Raw LLM output")
+    processing_time: Optional[float] = Field(None, description="Processing time in seconds")
 
 
 class VerificationResponse(BaseModel):
