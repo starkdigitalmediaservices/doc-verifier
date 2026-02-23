@@ -3,14 +3,22 @@ Pydantic models for API request/response
 """
 
 from typing import List, Dict, Optional, Any
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 
 class DocumentInfo(BaseModel):
-    """Document information from PMC"""
-    download_url: str = Field(..., description="URL to download the document")
+    """Document information from PMC - supports multiple input sources"""
+    download_url: Optional[str] = Field(None, description="URL to download the document")
+    file_buffer: Optional[str] = Field(None, description="Base64-encoded file content")
     document_type: str = Field(..., description="Type of document (Index 2, NOC, No Dues)")
     actual_data: Dict[str, Any] = Field(..., description="Actual/ground truth data for verification")
+
+    @model_validator(mode="after")
+    def validate_document_source(self):
+        """Ensure at least one of download_url or file_buffer is provided for JSON requests."""
+        if self.download_url is None and self.file_buffer is None:
+            raise ValueError("Provide either download_url or file_buffer for document content")
+        return self
 
 
 class VerificationRequest(BaseModel):

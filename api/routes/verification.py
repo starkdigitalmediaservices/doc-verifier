@@ -11,7 +11,8 @@ import asyncio
 from pathlib import Path
 from typing import List, Dict, Any
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+import json
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
 from api.models.schemas import (
@@ -24,7 +25,8 @@ from core import DocumentProcessor, AccuracyCalculator
 from core.service_registry import get_service_registry
 from config import get_settings, get_document_registry
 from services.webhook import post_data_via_webhook
-from utils.file_handler import download_file, get_file_extension
+from utils.file_handler import get_file_extension
+from services.document_resolver import resolve_document_file
 from api.routes.tasks import process_docs  # Import the Celery task
 
 router = APIRouter(prefix="/api/v1", tags=["verification"])
@@ -53,8 +55,8 @@ async def process_single_document(
     service_registry = get_service_registry()
     
     document_type = doc_info["document_type"]
-    download_url = doc_info["download_url"]
     actual_data = doc_info["actual_data"]
+    document_source = doc_info.get("download_url") or doc_info.get("file_path") or "base64_buffer"
     
     # Validate service and document type
     if not service_registry.is_valid_service(service_name):
@@ -83,26 +85,22 @@ async def process_single_document(
             detail=f"No prompt found for document type: {document_type}"
         )
     
-    # Download document
-    # Get extension from URL if available, but don't force a default
-    # The file_handler will detect the actual type after download
-    file_ext = get_file_extension(str(download_url))
-    if not file_ext:
-        file_ext = ""  # Let file_handler detect the type
-    
-    temp_file = temp_dir / f"doc_{int(time.time())}{file_ext}"
-    
+    # Resolve document file: download_url, file_buffer, or file_path (from multipart upload)
     try:
-        # download_file may return a different path if it renames the file
-        actual_file_path = await download_file(str(download_url), temp_file)
+        actual_file_path, document_source = await resolve_document_file(
+            doc_info=doc_info,
+            temp_dir=temp_dir,
+            uploaded_file=None,  # Only set when called from API route with multipart
+        )
     except Exception as e:
+        err_source = doc_info.get("download_url") or doc_info.get("file_path") or "document"
         return DocumentResult(
             document_type=document_type,
-            document_url=str(download_url),
+            document_url=str(err_source),
             success=False,
             accuracy=0.0,
             fields_accuracy={},
-            error=f"Failed to download document: {str(e)}"
+            error=f"Failed to resolve document: {str(e)}"
         )
     
     # Process document with LLM
@@ -123,7 +121,7 @@ async def process_single_document(
             processing_time = time.time() - start_time
             return DocumentResult(
                 document_type=document_type,
-                document_url=str(download_url),
+                document_url=str(document_source),
                 success=False,
                 accuracy=0.0,
                 fields_accuracy={},
@@ -156,7 +154,7 @@ async def process_single_document(
         processing_time = time.time() - start_time
         return DocumentResult(
             document_type=document_type,
-            document_url=str(download_url),
+            document_url=str(document_source),
             success=True,
             accuracy=accuracy_result["accuracy"],
             fields_accuracy=fields_accuracy,
@@ -169,7 +167,7 @@ async def process_single_document(
         processing_time = time.time() - start_time
         return DocumentResult(
             document_type=document_type,
-            document_url=str(download_url),
+            document_url=str(document_source),
             success=False,
             accuracy=0.0,
             fields_accuracy={},
@@ -241,7 +239,73 @@ async def verify_documents(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
         )
-        
+
+
+@router.post("/verify/upload")
+async def verify_documents_upload(
+    background_tasks: BackgroundTasks,
+    service_name: str = Form(...),
+    appNo: str = Form(...),
+    document_type: str = Form(...),
+    actual_data: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """
+    Verify document from browsed/uploaded file (multipart form).
+
+    Use this endpoint when the user selects a file from their device (file browse).
+    """
+    try:
+        # Parse actual_data JSON
+        try:
+            actual_data_dict = json.loads(actual_data)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid actual_data JSON: {e}")
+
+        # Create temporary directory
+        temp_dir = Path(tempfile.mkdtemp())
+        background_tasks.add_task(
+            lambda: shutil.rmtree(temp_dir, ignore_errors=True) if temp_dir.exists() else None
+        )
+
+        # Save uploaded file to temp_dir (file_path will be used by document_resolver)
+        file_content = await file.read()
+        file_ext = Path(file.filename or "doc").suffix or ""
+        temp_file = temp_dir / f"upload_{int(time.time())}{file_ext}"
+        temp_file.parent.mkdir(parents=True, exist_ok=True)
+        temp_file.write_bytes(file_content)
+
+        # Build doc_info with file_path (resolver will use elif file_path branch)
+        doc_info = {
+            "file_path": str(temp_file),
+            "document_type": document_type,
+            "actual_data": actual_data_dict,
+        }
+
+        documents_data = [doc_info]
+        task_id = str(uuid.uuid4())
+
+        task = process_docs.delay({
+            "documents": documents_data,
+            "service_name": service_name,
+            "temp_dir": str(temp_dir),
+            "task_id": task_id,
+        })
+
+        return {
+            "success": True,
+            "service_name": service_name,
+            "appNo": appNo,
+            "task_id": task.id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
 
 @router.get("/health", response_model=dict)
 async def health_check() -> dict:

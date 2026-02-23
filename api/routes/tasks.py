@@ -12,7 +12,6 @@ from core.celery import _celery
 from config import get_settings
 from services.webhook import post_data_via_webhook
 # Import utils first to ensure it's available when process_single_document is imported
-from utils.file_handler import download_file, get_file_extension  # noqa: F401
 
 
 def process_single_document_sync(
@@ -98,7 +97,7 @@ def process_docs(data: Dict):
                 doc_processing_time = time.time() - doc_start_time
                 error_result = {
                     "document_type": doc_info.get("document_type", "Unknown"),
-                    "document_url": doc_info.get("download_url", ""),
+                    "document_url": doc_info.get("download_url") or doc_info.get("file_path") or "document",
                     "success": False,
                     "accuracy": 0.0,
                     "fields_accuracy": {},
